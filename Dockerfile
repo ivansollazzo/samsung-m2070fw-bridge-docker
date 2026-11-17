@@ -61,7 +61,8 @@ ENV SCANNER_IP="" \
     AVAHI_MODE=auto \
     WEB_INTERFACE=true \
     DEBUG=false \
-    RESCAN_INTERVAL=60
+    RESCAN_INTERVAL=60 \
+    SANE_JPEG=no
 
 EXPOSE 8090
 

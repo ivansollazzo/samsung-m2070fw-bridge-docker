@@ -16,6 +16,7 @@ AVAHI_MODE="${AVAHI_MODE:-auto}"
 WEB_INTERFACE="${WEB_INTERFACE:-true}"
 DEBUG="${DEBUG:-false}"
 RESCAN_INTERVAL="${RESCAN_INTERVAL:-60}"
+SANE_JPEG="${SANE_JPEG:-no}"
 DBUS_SOCKET=/run/dbus/system_bus_socket
 
 # --- 1. SANE ---------------------------------------------------------------
@@ -40,6 +41,10 @@ else
     # macOS applies a 1.8 gamma to eSCL scans; compensate (see AirSane README)
     echo "gray-gamma 0.555555"
     echo "color-gamma 0.555555"
+    # The M2070FW's JPEG-compressed colour scans are broken over the network
+    # ("Not a JPEG file: starts with 0x00 0x00") and leave the scanner stuck:
+    # ask for uncompressed data instead.
+    echo "jpeg ${SANE_JPEG}"
     if [[ -n "${SCANNER_LOCATION}" ]]; then echo "location ${SCANNER_LOCATION}"; fi
   } > /etc/airsane/options.conf
 fi
