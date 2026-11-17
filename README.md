@@ -104,6 +104,40 @@ Nei log dovresti vedere qualcosa come:
    docker compose exec -T scanbridge scanimage --format=png > test.png
    ```
 
+## Uso da macOS, Windows e Linux
+
+Scanner (eSCL) e stampante (IPP) usano protocolli standard, quindi non servono driver sui
+client. In tutti i casi il client deve essere nella **stessa subnet** del server.
+
+### macOS (e iPhone/iPad)
+Impostazioni di Sistema → Stampanti e Scanner → **Aggiungi stampante** → "Samsung
+SL-M2070FW". Da iPhone e iPad la stampante compare direttamente nel menu Stampa.
+
+### Windows 10/11
+- **Stampante:** Impostazioni → Bluetooth e dispositivi → Stampanti e scanner →
+  **Aggiungi dispositivo**. La stampante viene trovata via mDNS e installata con il driver
+  integrato "Microsoft IPP Class Driver". Se non compare, aggiungila a mano: "La stampante
+  desiderata non è nell'elenco" → "Seleziona una stampante condivisa in base al nome" →
+  `http://<IP-server>:631/printers/Samsung_SL-M2070FW`. Usa l'**IP** del server, non
+  `nome.local`: con il nome Windows spesso fallisce.
+- **Scanner:** dalla stessa pagina, **Aggiungi dispositivo** trova anche lo scanner. Poi
+  cliccalo e scegli "Apri app scanner" (installa l'app Scanner di Microsoft se manca).
+  Serve Windows 11, oppure Windows 10 aggiornato almeno a giugno 2022 (KB5014666).
+
+### Linux
+- **Stampante:** con CUPS e `cups-browsed` (presenti di default su Ubuntu, Fedora ecc.) la
+  stampante compare da sola come stampante "driverless". Altrimenti:
+  ```bash
+  sudo lpadmin -p M2070FW -E -v ipp://<IP-server>:631/printers/Samsung_SL-M2070FW -m everywhere
+  ```
+- **Scanner:** installa `sane-airscan` (`sudo apt install sane-airscan`). In
+  `/etc/sane.d/dll.conf` deve esserci la riga `airscan`, e la riga `escl` va commentata.
+  Lo scanner compare in Simple Scan, XSane e `scanimage -L`.
+
+### Android
+La stampa funziona con il servizio di stampa integrato (Mopria). Per scansionare c'è l'app
+**Mopria Scan**.
+
 ## Configurazione
 
 | Variabile          | Default | Descrizione |

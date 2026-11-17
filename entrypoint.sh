@@ -180,7 +180,9 @@ EOF
   log "CUPS: queue '${PRINTER_QUEUE}' -> ${PRINTER_URI} on port ${CUPS_PORT}"
 
   # CUPS always announces "<name> @ <host>": announce the queue ourselves with
-  # the exact device name, as an AirPrint printer (_universal subtype + URF).
+  # the exact device name and the same TXT keys CUPS would use: AirPrint
+  # (_universal subtype + URF) for Apple, "mopria-certified" for the Windows
+  # IPP class driver and Android, plain IPP for Linux (driverless printing).
   if [[ "${AVAHI_MODE}" != "none" ]]; then
     local host; host="$(hostname)"
     supervise avahi-publish avahi-publish -s \
@@ -197,6 +199,8 @@ EOF
       "URF=V1.4,CP1,W8,PQ4,RS600,FN3" \
       "UUID=${DEVICE_UUID}" \
       "Color=F" "Duplex=F" "Copies=T" \
+      "TLS=1.2" \
+      "mopria-certified=1.3" \
       "printer-type=0x1046"
     log "mDNS: printer announced as '${DEVICE_NAME}'"
   fi
