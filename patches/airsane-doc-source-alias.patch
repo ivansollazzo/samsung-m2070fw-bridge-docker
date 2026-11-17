@@ -1,0 +1,24 @@
+diff --git a/sanecpp/sanecpp.cpp b/sanecpp/sanecpp.cpp
+index 1e43ce6..af50d08 100644
+--- a/sanecpp/sanecpp.cpp
++++ b/sanecpp/sanecpp.cpp
+@@ -183,6 +183,10 @@ option&
+ option_set::operator[](const std::string& s)
+ {
+   auto i = m_options.find(s);
++  // Some backends (e.g. Samsung's proprietary "smfp") name the scan source
++  // option "doc-source" instead of the standard "source" (SANE_NAME_SCAN_SOURCE).
++  if (i == m_options.end() && s == "source")
++    i = m_options.find("doc-source");
+   return i == m_options.end() ? s_nulloption : i->second;
+ }
+ 
+@@ -190,6 +194,8 @@ const option&
+ option_set::operator[](const std::string& s) const
+ {
+   auto i = m_options.find(s);
++  if (i == m_options.end() && s == "source")
++    i = m_options.find("doc-source");
+   return i == m_options.end() ? s_nulloption : i->second;
+ }
+ 

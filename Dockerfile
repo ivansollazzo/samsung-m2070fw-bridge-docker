@@ -16,11 +16,15 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src
+COPY patches/ /src/patches/
+# Local patches (see patches/): e.g. support for the Samsung smfp backend,
+# which calls the scan source option "doc-source" instead of "source".
 RUN git init -q AirSane \
  && cd AirSane \
  && git remote add origin "${AIRSANE_REPO}" \
  && git fetch -q --depth 1 origin "${AIRSANE_REF}" \
  && git checkout -q FETCH_HEAD \
+ && for p in /src/patches/*.patch; do git apply -v "$p"; done \
  && cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
  && cmake --build build -j"$(nproc)" \
  && strip build/airsaned

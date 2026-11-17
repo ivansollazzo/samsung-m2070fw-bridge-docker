@@ -156,7 +156,10 @@ lo scanner. Di default è ammessa solo la sottorete locale.
 ## Crediti
 
 - [AirSane](https://github.com/SimulPiscator/AirSane) di SimulPiscator (GPL-3.0), compilato
-  dai sorgenti a un commit fissato (`AIRSANE_REF` nel `Dockerfile`)
+  dai sorgenti a un commit fissato (`AIRSANE_REF` nel `Dockerfile`), con le patch in
+  `patches/`. In particolare il driver Samsung chiama l'opzione della sorgente
+  `doc-source` invece del nome standard `source`, e senza patch AirSane mostrerebbe solo
+  il piano di vetro, non l'ADF.
 - [SANE](http://www.sane-project.org/), backend `xerox_mfp`
 - Samsung Unified Linux Driver (proprietario, © Samsung/HP), pacchetti Debian da
   [SULDR](https://www.bchemnet.com/suldr/). L'immagine Docker lo scarica durante il build,
