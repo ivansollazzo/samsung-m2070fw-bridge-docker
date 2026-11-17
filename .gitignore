@@ -1,0 +1,6 @@
+.env
+config/options.conf
+*.png
+!config/*.png
+*.pdf
+*.jpg

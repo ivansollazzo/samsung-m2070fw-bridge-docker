@@ -1,0 +1,19 @@
+services:
+  scanbridge:
+    build: .
+    image: samsung-m2070fw-bridge:latest
+    container_name: samsung-m2070fw-bridge
+    # Host networking is required: mDNS/Bonjour uses multicast, which does
+    # not cross Docker's bridge network.
+    network_mode: host
+    env_file: .env
+    restart: unless-stopped
+    volumes:
+      # AVAHI_MODE=host (recommended if the host already runs avahi-daemon):
+      # use the host's avahi through the system D-Bus instead of starting one.
+      # - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
+
+      # Optional custom AirSane config (see config/options.conf.example)
+      # - ./config/options.conf:/config/options.conf:ro
+      # - ./config/access.conf:/config/access.conf:ro
+      - /etc/localtime:/etc/localtime:ro
