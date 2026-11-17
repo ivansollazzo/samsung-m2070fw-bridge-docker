@@ -40,12 +40,16 @@ LABEL org.opencontainers.image.title="samsung-m2070fw-bridge-docker" \
 
 # sane-utils: scanimage + libsane1 (also provides the open-source xerox_mfp backend)
 # avahi-daemon + dbus: mDNS/Bonjour announcement (used when the host has no avahi)
+# avahi-utils: avahi-publish, to announce the print queue under its exact name
+# cups + cups-filters + ghostscript + libcupsimage2t64: print server for the
+#   Samsung driver (its rastertospl filter needs libcupsimage)
 RUN apt-get update \
- && apt-get install -y --no-install-recommends \
+ && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
       ca-certificates \
       sane-utils libsane1 \
       libjpeg62-turbo libpng16-16t64 libavahi-client3 libusb-1.0-0 \
-      avahi-daemon dbus tini \
+      avahi-daemon avahi-utils dbus tini \
+      cups cups-filters ghostscript poppler-utils libcupsimage2t64 \
  && rm -rf /var/lib/apt/lists/*
 
 # Samsung Unified Linux Driver (smfp SANE backend) from the SULDR repository
@@ -62,7 +66,10 @@ RUN dpkg -i /tmp/suldr-keyring.deb \
  && apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${SULD_DRIVER}" \
  && rm -rf /var/lib/apt/lists/* \
- && test -e /usr/lib/sane/libsane-smfp.so.1
+ && test -e /usr/lib/sane/libsane-smfp.so.1 \
+ && test -x /usr/lib/cups/filter/rastertospl \
+ && test -e /usr/share/ppd/suld/Samsung_M2070_Series.ppd.gz \
+ && ! ldd /usr/lib/cups/filter/rastertospl | grep -q "not found"
 
 # avahi's rlimit-nproc breaks inside containers (shared UID namespace);
 # also don't advertise the host as a "workstation" from the container.
@@ -73,6 +80,7 @@ COPY --from=build /src/AirSane/build/airsaned /usr/local/bin/airsaned
 COPY --from=build /src/AirSane/etc/Gnome-scanner.png /etc/airsane/Gnome-scanner.png
 COPY config/access.conf /etc/airsane/
 COPY config/ignore.conf /etc/airsane/ignore.conf.default
+COPY config/cupsd.conf /etc/cups/cupsd.conf.template
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
@@ -85,9 +93,15 @@ ENV SCANNER_IP="" \
     DEBUG=false \
     RESCAN_INTERVAL=60 \
     SCAN_BACKEND=smfp \
-    SANE_JPEG=""
+    SCAN_GAMMA=1.0 \
+    SANE_JPEG="" \
+    DEVICE_NAME="Samsung SL-M2070FW" \
+    PRINTER_ENABLED=true \
+    PRINTER_QUEUE=Samsung_SL-M2070FW \
+    PRINTER_PAPER=A4 \
+    CUPS_PORT=631
 
-EXPOSE 8090
+EXPOSE 8090 631
 
 HEALTHCHECK --interval=60s --timeout=5s --start-period=30s --retries=3 \
   CMD bash -c "exec 3<>/dev/tcp/127.0.0.1/${LISTEN_PORT}" || exit 1

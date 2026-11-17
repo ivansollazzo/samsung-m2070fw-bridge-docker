@@ -1,0 +1,49 @@
+diff --git a/server/optionsfile.cpp b/server/optionsfile.cpp
+index e3de031..064a4c5 100644
+--- a/server/optionsfile.cpp
++++ b/server/optionsfile.cpp
+@@ -97,6 +97,12 @@ OptionsFile::scannerOptions(const Scanner* pScanner) const
+     }
+     else if (option.first == "note" || option.first == "location")
+       processedOptions.note = option.second;
++    else if (option.first == "name")
++      processedOptions.name = option.second;
++    else if (option.first == "make-and-model")
++      processedOptions.make_and_model = option.second;
++    else if (option.first == "uuid")
++      processedOptions.uuid = option.second;
+     else if (option.first == "gray-gamma")
+       processedOptions.gray_gamma = ::atof(option.second.c_str());
+     else if (option.first == "color-gamma")
+diff --git a/server/optionsfile.h b/server/optionsfile.h
+index e2043fc..a0011f7 100644
+--- a/server/optionsfile.h
++++ b/server/optionsfile.h
+@@ -37,7 +37,7 @@ public:
+   typedef std::vector<std::pair<std::string, std::string>> RawOptions;
+   struct Options
+   {
+-    std::string icon, note;
++    std::string icon, note, name, make_and_model, uuid;
+     double gray_gamma = 1.0, color_gamma = 1.0;
+     bool synthesize_gray = false;
+     RawOptions sane_options;
+diff --git a/server/scanner.cpp b/server/scanner.cpp
+index df325d7..77d518a 100644
+--- a/server/scanner.cpp
++++ b/server/scanner.cpp
+@@ -481,6 +481,14 @@ Scanner::Private::init2(const OptionsFile& optionsfile)
+   // Apply device options first so any changes to dependent parameters
+   // are detected during initialization.
+   mDeviceOptions = optionsfile.scannerOptions(p);
++  // Optional overrides of the advertised name, make/model and UUID (e.g. to
++  // present scanner and a CUPS print queue as a single multifunction device).
++  if (!mDeviceOptions.name.empty())
++    mPublishedName = mDeviceOptions.name;
++  if (!mDeviceOptions.make_and_model.empty())
++    mMakeAndModel = mDeviceOptions.make_and_model;
++  if (!mDeviceOptions.uuid.empty())
++    mUuid = mDeviceOptions.uuid;
+   for (const auto &option : mDeviceOptions.sane_options) {
+     if (opt[option.first].is_null()) {
+       std::clog << "SANE option specified in options file: " << option.first << ", does not exist" << std::endl;

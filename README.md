@@ -1,8 +1,14 @@
 # samsung-m2070fw-bridge-docker
 
-Rende lo **scanner** della Samsung Xpress **M2070FW** disponibile in rete come scanner
-**AirScan/eSCL**, utilizzabile senza driver da macOS (Acquisizione Immagine, Anteprima),
-Windows 10/11 e Linux (`sane-airscan`).
+Rende la Samsung Xpress **M2070FW** disponibile in rete come **multifunzione AirPrint**:
+
+- **scanner AirScan/eSCL**, utilizzabile senza driver da macOS (Acquisizione Immagine,
+  Anteprima), Windows 10/11 e Linux (`sane-airscan`);
+- **stampante AirPrint** servita da CUPS con il driver ufficiale Samsung, in alternativa
+  all'AirPrint integrato nella stampante.
+
+Scanner e stampante vengono annunciati con lo stesso nome (default **"Samsung
+SL-M2070FW"**) e lo stesso UUID, quindi macOS li mostra come un unico dispositivo.
 
 Serve perché i driver Samsung per macOS sono solo Intel e smettono di funzionare
 senza Rosetta 2.
@@ -11,7 +17,8 @@ senza Rosetta 2.
 
 ```
  Mac / PC ──eSCL (HTTP :8090) + Bonjour──▶ [ container ]  ──SANE smfp (driver Samsung)──▶ M2070FW
-                                         AirSane + avahi
+          ──IPP  (HTTP :631)  + Bonjour──▶  AirSane, CUPS  ──SPL, raw socket :9100───────▶
+                                            avahi
 ```
 
 - **SANE**, con il backend **`smfp`** del driver ufficiale Samsung (Unified Linux Driver,
@@ -27,8 +34,12 @@ senza Rosetta 2.
   online (era spenta, si è riavviata) fa ripetere la ricerca ad AirSane, senza riavviare
   il container.
 
-**La stampa non passa da qui.** La M2070FW supporta AirPrint nel firmware, quindi macOS
-continua a stamparci direttamente, anche senza il driver Samsung.
+- **CUPS** con il driver Samsung (filtro `rastertospl`, PPD della M2070) espone una coda
+  condivisa. Riceve PDF/immagini dai client, li converte nel linguaggio della stampante e
+  li manda sulla porta 9100. Viene annunciata come stampante AirPrint (`_ipp._tcp`,
+  sottotipo `_universal`, URF), quindi funziona anche da iPhone e iPad.
+- La stampante continua ad annunciare anche il proprio **AirPrint integrato**. Puoi usare
+  l'uno o l'altro: sul Mac compaiono come due stampanti diverse.
 
 ## Requisiti
 
@@ -82,9 +93,10 @@ Nei log dovresti vedere qualcosa come:
 
 1. **Interfaccia web:** apri `http://<ip-server>:8090/`. Ci deve essere lo scanner, e da lì
    puoi già fare una scansione di prova.
-2. **macOS:** apri **Acquisizione Immagine**. Lo scanner compare in "Condivisi" o
-   "Dispositivi". In Impostazioni di Sistema → Stampanti e Scanner risulta come
-   "Bonjour Scanner".
+2. **macOS:** in Impostazioni di Sistema → Stampanti e Scanner → **Aggiungi stampante**
+   compare "Samsung SL-M2070FW" come stampante AirPrint. Una volta aggiunta, la scheda
+   **Scansiona** usa lo scanner del container. Lo scanner compare anche direttamente in
+   **Acquisizione Immagine**.
 3. **Da riga di comando, nel container:**
    ```bash
    docker compose exec scanbridge scanimage -L
@@ -103,6 +115,14 @@ Nei log dovresti vedere qualcosa come:
 | `WEB_INTERFACE`    | `true`  | Abilita la web UI |
 | `AVAHI_MODE`       | `auto`  | `auto`, `host`, `internal`, `none` |
 | `RESCAN_INTERVAL`  | `60`    | Secondi tra i controlli di raggiungibilità (`0` = off) |
+| `DEVICE_NAME`      | `Samsung SL-M2070FW` | Nome Bonjour di scanner e stampante |
+| `DEVICE_UUID`      | *(derivato)* | UUID comune; di default è calcolato da nome e IP, stabile tra i riavvii |
+| `PRINTER_ENABLED`  | `true`  | Server di stampa CUPS |
+| `PRINTER_QUEUE`    | `Samsung_SL-M2070FW` | Nome della coda CUPS |
+| `PRINTER_URI`      | `socket://SCANNER_IP:9100` | Come CUPS raggiunge la stampante |
+| `PRINTER_PAPER`    | `A4`    | Formato carta predefinito |
+| `CUPS_PORT`        | `631`   | Porta di CUPS (deve essere libera sull'host) |
+| `SCAN_GAMMA`       | `1.0`   | Gamma applicata alle scansioni (`1.0` = nessuna correzione) |
 | `SCAN_BACKEND`     | `smfp`  | `smfp` (driver Samsung) o `xerox_mfp` (open source) |
 | `SANE_JPEG`        | *(vuoto)* | Solo `xerox_mfp`: forza l'opzione `jpeg` (`yes`/`no`) |
 | `DEBUG`            | `false` | Log dettagliati di AirSane |
@@ -136,12 +156,22 @@ lo scanner. Di default è ammessa solo la sottorete locale.
   poi `docker compose restart`.
 - **Il Mac non vede lo scanner, ma la web UI funziona.** È un problema di mDNS. Verifica
   `AVAHI_MODE`, che non girino due avahi sull'host e che il firewall lasci passare UDP 5353
-  e TCP 8090. Il Mac deve stare nella stessa subnet: mDNS non attraversa i router (e
+  e TCP 8090 e 631. Il Mac deve stare nella stessa subnet: mDNS non attraversa i router (e
   nemmeno, di solito, le VLAN separate o una Wi-Fi "ospiti").
 - **Acquisizione Immagine dà "error 21345".** Problema noto di AirSane: abilita IPv6 sulla
   rete e sull'host, poi riavvia (vedi il README di AirSane).
-- **Scansioni troppo scure o troppo chiare.** Regola `gray-gamma` / `color-gamma` in
-  `options.conf`.
+- **Scansioni troppo scure o troppo chiare.** Regola `SCAN_GAMMA`: sotto 1 schiarisce,
+  sopra 1 scurisce. Il README di AirSane suggerisce `0.555555` per macOS, ma con la
+  M2070FW rende il testo grigio e slavato, per questo il default è `1.0`.
+- **Stampa: `port 631 is already in use` nei log.** Sull'host gira già CUPS. Fermalo
+  (`sudo systemctl disable --now cups cups-browsed`) oppure imposta un'altra `CUPS_PORT`
+  (es. `6631`): l'annuncio Bonjour comunica la porta giusta ai client.
+- **Stato della coda e dei lavori di stampa:**
+  ```bash
+  docker compose exec scanbridge lpstat -t
+  ```
+  L'interfaccia web di CUPS (`http://<server>:631/`) è consultabile da tutta la LAN; le
+  pagine di amministrazione solo dal server.
 - **Lo scanner sparisce dopo che la stampante è stata spenta.** Ricompare entro
   `RESCAN_INTERVAL` secondi da quando torna raggiungibile. Altrimenti:
   `docker compose restart`.
@@ -157,9 +187,13 @@ lo scanner. Di default è ammessa solo la sottorete locale.
 
 - [AirSane](https://github.com/SimulPiscator/AirSane) di SimulPiscator (GPL-3.0), compilato
   dai sorgenti a un commit fissato (`AIRSANE_REF` nel `Dockerfile`), con le patch in
-  `patches/`. In particolare il driver Samsung chiama l'opzione della sorgente
-  `doc-source` invece del nome standard `source`, e senza patch AirSane mostrerebbe solo
-  il piano di vetro, non l'ADF.
+  `patches/`:
+  - `airsane-doc-source-alias.patch`: il driver Samsung chiama l'opzione della sorgente
+    `doc-source` invece del nome standard `source`. Senza patch AirSane mostrerebbe solo
+    il piano di vetro, non l'ADF.
+  - `airsane-name-override.patch`: opzioni `name`, `make-and-model` e `uuid` in
+    `options.conf`, per annunciare lo scanner con il nome e l'UUID della stampante.
+- [CUPS](https://openprinting.github.io/cups/) e cups-filters (OpenPrinting)
 - [SANE](http://www.sane-project.org/), backend `xerox_mfp`
 - Samsung Unified Linux Driver (proprietario, © Samsung/HP), pacchetti Debian da
   [SULDR](https://www.bchemnet.com/suldr/). L'immagine Docker lo scarica durante il build,
