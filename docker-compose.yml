@@ -1,6 +1,9 @@
 services:
   scanbridge:
     build: .
+    # The Samsung driver (SULDR) is binary-only for x86_64. On an ARM host this
+    # needs amd64 emulation (qemu/binfmt) and is untested.
+    platform: linux/amd64
     image: samsung-m2070fw-bridge:latest
     container_name: samsung-m2070fw-bridge
     # Host networking is required: mDNS/Bonjour uses multicast, which does

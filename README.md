@@ -10,12 +10,17 @@ senza Rosetta 2.
 ## Come funziona
 
 ```
- Mac / PC ──eSCL (HTTP :8090) + Bonjour──▶ [ container ]  ──SANE xerox_mfp (TCP :9400)──▶ M2070FW
+ Mac / PC ──eSCL (HTTP :8090) + Bonjour──▶ [ container ]  ──SANE smfp (driver Samsung)──▶ M2070FW
                                          AirSane + avahi
 ```
 
-- **SANE**, con il backend open source `xerox_mfp` (che supporta la M2070), parla con la
-  stampante in rete sulla porta 9400.
+- **SANE**, con il backend **`smfp`** del driver ufficiale Samsung (Unified Linux Driver,
+  installato dal repository [SULDR](https://www.bchemnet.com/suldr/)), parla con la
+  stampante in rete. Il driver trova da solo la stampante con un broadcast SNMP; il
+  container pubblica solo quella con l'IP indicato in `SCANNER_IP`.
+- In alternativa c'è il backend open source `xerox_mfp` (`SCAN_BACKEND=xerox_mfp`). Con
+  la M2070FW però si è dimostrato instabile: scansioni a colori che falliscono e, con
+  l'ADF, perfino riavvii della stampante.
 - **[AirSane](https://github.com/SimulPiscator/AirSane)** prende lo scanner SANE e lo
   pubblica come scanner eSCL, annunciato via mDNS/Bonjour.
 - Un piccolo watcher controlla ogni minuto se la stampante è raggiungibile. Quando torna
@@ -27,7 +32,9 @@ continua a stamparci direttamente, anche senza il driver Samsung.
 
 ## Requisiti
 
-- Un host Linux sulla **stessa LAN/subnet** della stampante e dei client (x86_64 o ARM64)
+- Un host Linux **x86_64** sulla **stessa LAN/subnet** della stampante e dei client. Il
+  driver Samsung esiste solo in versione binaria per Intel/AMD; su ARM servirebbe
+  l'emulazione amd64 (qemu), non testata.
 - Docker con il plugin Compose
 - Stampante con **IP fisso** (reservation DHCP sul router)
 
@@ -67,7 +74,7 @@ docker compose logs -f
 Nei log dovresti vedere qualcosa come:
 
 ```
-[bridge] Found: device `xerox_mfp:tcp 192.168.1.50' is a Samsung M2070 Series multi-function peripheral
+[bridge] Found: device `smfp:net;192.168.1.50' is a Samsung M2070 Series on 192.168.1.50 Scanner
 [bridge] Starting AirSane on port 8090
 ```
 
@@ -82,7 +89,7 @@ Nei log dovresti vedere qualcosa come:
    ```bash
    docker compose exec scanbridge scanimage -L
    docker compose exec scanbridge scanimage -A                     # opzioni del backend
-   docker compose exec -T scanbridge scanimage --jpeg=no --format=png > test.png
+   docker compose exec -T scanbridge scanimage --format=png > test.png
    ```
 
 ## Configurazione
@@ -96,7 +103,8 @@ Nei log dovresti vedere qualcosa come:
 | `WEB_INTERFACE`    | `true`  | Abilita la web UI |
 | `AVAHI_MODE`       | `auto`  | `auto`, `host`, `internal`, `none` |
 | `RESCAN_INTERVAL`  | `60`    | Secondi tra i controlli di raggiungibilità (`0` = off) |
-| `SANE_JPEG`        | `no`    | Compressione JPEG del backend: lasciala a `no` (vedi sotto) |
+| `SCAN_BACKEND`     | `smfp`  | `smfp` (driver Samsung) o `xerox_mfp` (open source) |
+| `SANE_JPEG`        | *(vuoto)* | Solo `xerox_mfp`: forza l'opzione `jpeg` (`yes`/`no`) |
 | `DEBUG`            | `false` | Log dettagliati di AirSane |
 
 Il **nome** con cui lo scanner appare ai client viene dal modello riportato da SANE (tipo "Samsung M2070 Series") e
@@ -114,17 +122,18 @@ lo scanner. Di default è ammessa solo la sottorete locale.
   ```bash
   nc -zv <SCANNER_IP> 9400
   ```
-  Per i dettagli metti `DEBUG=true`, oppure:
+  Per i dettagli metti `DEBUG=true` (log di AirSane).
+- **`scanner not found yet` con `smfp`.** Il driver cerca la stampante con un broadcast
+  SNMP (UDP 161, community `public`): controlla che SNMP sia attivo sulla stampante
+  (SyncThru Web Service → Impostazioni → Rete) e che host e stampante siano nella stessa
+  subnet. Per vedere cosa trova:
   ```bash
-  docker compose exec -e SANE_DEBUG_XEROX_MFP=4 scanbridge scanimage -L
+  docker compose exec scanbridge scanimage -L
   ```
-- **Scansioni a colori che falliscono con `Not a JPEG file: starts with 0x00 0x00`**, o
-  scanner bloccato/lentissimo dopo una scansione a colori. Con la compressione JPEG attiva
-  (default del backend) i dati a colori della M2070FW arrivano corrotti e lo scanner resta
-  in uno stato bloccato. Il container imposta `jpeg no` per questo. Se usi un
-  `options.conf` tuo, ricordati di includere `jpeg no`. Per sbloccare lo scanner: spegni e
-  riaccendi la stampante, poi `docker compose restart`. Per i test a mano con `scanimage`
-  aggiungi sempre `--jpeg=no`.
+- **Con `xerox_mfp`: `Not a JPEG file: starts with 0x00 0x00`**, scanner bloccato o
+  stampante che si riavvia. Sono problemi noti di quel backend con questa famiglia di
+  Samsung: usa `SCAN_BACKEND=smfp`. Per sbloccare la stampante spegnila e riaccendila,
+  poi `docker compose restart`.
 - **Il Mac non vede lo scanner, ma la web UI funziona.** È un problema di mDNS. Verifica
   `AVAHI_MODE`, che non girino due avahi sull'host e che il firewall lasci passare UDP 5353
   e TCP 8090. Il Mac deve stare nella stessa subnet: mDNS non attraversa i router (e
@@ -141,11 +150,14 @@ lo scanner. Di default è ammessa solo la sottorete locale.
 
 - Il tasto **"Scansione → PC"** sul pannello della stampante non funziona: usa un
   protocollo proprietario Samsung. La scansione si avvia dal computer.
-- ADF e risoluzioni disponibili dipendono dal backend `xerox_mfp` (controlla con
-  `scanimage -A`).
+- ADF, risoluzioni e opzioni disponibili dipendono dal backend (controlla con
+  `docker compose exec scanbridge scanimage -A`).
 
 ## Crediti
 
 - [AirSane](https://github.com/SimulPiscator/AirSane) di SimulPiscator (GPL-3.0), compilato
   dai sorgenti a un commit fissato (`AIRSANE_REF` nel `Dockerfile`)
 - [SANE](http://www.sane-project.org/), backend `xerox_mfp`
+- Samsung Unified Linux Driver (proprietario, © Samsung/HP), pacchetti Debian da
+  [SULDR](https://www.bchemnet.com/suldr/). L'immagine Docker lo scarica durante il build,
+  e questo repository non lo ridistribuisce.

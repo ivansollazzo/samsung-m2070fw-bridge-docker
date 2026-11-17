@@ -34,14 +34,31 @@ LABEL org.opencontainers.image.title="samsung-m2070fw-bridge-docker" \
       org.opencontainers.image.description="Expose the Samsung Xpress M2070FW scanner to macOS/Windows/Linux as an AirScan (eSCL) scanner via SANE + AirSane" \
       org.opencontainers.image.source="https://github.com/ivansollazzo/samsung-m2070fw-bridge-docker"
 
-# sane-utils: scanimage + libsane1 with the xerox_mfp backend
+# sane-utils: scanimage + libsane1 (also provides the open-source xerox_mfp backend)
 # avahi-daemon + dbus: mDNS/Bonjour announcement (used when the host has no avahi)
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
+      ca-certificates \
       sane-utils libsane1 \
       libjpeg62-turbo libpng16-16t64 libavahi-client3 libusb-1.0-0 \
       avahi-daemon dbus tini \
  && rm -rf /var/lib/apt/lists/*
+
+# Samsung Unified Linux Driver (smfp SANE backend) from the SULDR repository
+# (https://www.bchemnet.com/suldr/). Binary-only, amd64/i386 only.
+ARG SULDR_URL=https://www.bchemnet.com/suldr
+ARG SULDR_KEYRING_DEB=suldr-keyring_4_all.deb
+ARG SULD_DRIVER=suld-driver2-1.00.39
+ADD ${SULDR_URL}/pool/debian/extra/su/${SULDR_KEYRING_DEB} /tmp/suldr-keyring.deb
+RUN dpkg -i /tmp/suldr-keyring.deb \
+ && rm /tmp/suldr-keyring.deb \
+ && key="$(dpkg -L suldr-keyring | grep -E '\.(gpg|asc)$' | head -n1)" \
+ && test -n "${key}" \
+ && echo "deb [signed-by=${key}] ${SULDR_URL}/ debian extra" > /etc/apt/sources.list.d/suldr.list \
+ && apt-get update \
+ && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${SULD_DRIVER}" \
+ && rm -rf /var/lib/apt/lists/* \
+ && test -e /usr/lib/sane/libsane-smfp.so.1
 
 # avahi's rlimit-nproc breaks inside containers (shared UID namespace);
 # also don't advertise the host as a "workstation" from the container.
@@ -50,7 +67,8 @@ RUN sed -i 's/^rlimit-nproc=/#rlimit-nproc=/' /etc/avahi/avahi-daemon.conf \
 
 COPY --from=build /src/AirSane/build/airsaned /usr/local/bin/airsaned
 COPY --from=build /src/AirSane/etc/Gnome-scanner.png /etc/airsane/Gnome-scanner.png
-COPY config/access.conf config/ignore.conf /etc/airsane/
+COPY config/access.conf /etc/airsane/
+COPY config/ignore.conf /etc/airsane/ignore.conf.default
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
@@ -62,7 +80,8 @@ ENV SCANNER_IP="" \
     WEB_INTERFACE=true \
     DEBUG=false \
     RESCAN_INTERVAL=60 \
-    SANE_JPEG=no
+    SCAN_BACKEND=smfp \
+    SANE_JPEG=""
 
 EXPOSE 8090
 

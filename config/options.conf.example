@@ -8,8 +8,8 @@
 icon Gnome-scanner.png
 location Studio
 
-# Required on the M2070FW: JPEG-compressed colour scans are broken
-jpeg no
+# xerox_mfp backend only: disable JPEG compression (broken colour scans)
+# jpeg no
 
 # macOS applies a 1.8 gamma to eSCL scans; this compensates (1/1.8)
 gray-gamma 0.555555
